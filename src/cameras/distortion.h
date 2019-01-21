@@ -13,9 +13,28 @@
 #include "camera.h"
 #include "perspective.h"
 #include "film.h"
+#include <vector>
 
 
 namespace pbrt {
+
+  class DistortionCamera : public ProjectiveCamera {
+    
+    public:
+      typedef std::vector<Float> coeffVec;
+      DistortionCamera(const AnimatedTransform &CameraToWorld,
+                       const Bounds2f &screenWindow, Float shutterOpen,
+                       Float shutterClose, Float lensRadius, Float focalDistance,
+                       Float fov, Film *film, const Medium *medium,
+                       std::string distortion_model, coeffVec coeffs);
+      Float GenerateRay(const CameraSample &sample, Ray *ray) const;
+      Float GenerateRayDifferential(const CameraSample &sample,
+                                    RayDifferential *ray) const;
+    private:
+      std::string distortion_model;
+      coeffVec coeffs;
+
+  };
   // for now the distortionCamera factory creates a perspective camera 
   // for testing purposes
   PerspectiveCamera *CreateDistortionCamera(const ParamSet &params,
