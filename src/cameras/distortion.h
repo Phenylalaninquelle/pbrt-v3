@@ -37,7 +37,7 @@ namespace pbrt {
   };
   // for now the distortionCamera factory creates a perspective camera 
   // for testing purposes
-  PerspectiveCamera *CreateDistortionCamera(const ParamSet &params,
+  DistortionCamera *CreateDistortionCamera(const ParamSet &params,
                                             const AnimatedTransform &cam2world,
                                             Film *film, const Medium *medium);
 }
