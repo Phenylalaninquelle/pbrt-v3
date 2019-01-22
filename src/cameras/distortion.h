@@ -28,11 +28,12 @@ namespace pbrt {
                        Float fov, Film *film, const Medium *medium,
                        std::string distortion_model, coeffVec coeffs);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
-      Float GenerateRayDifferential(const CameraSample &sample,
-                                    RayDifferential *ray) const;
+      //Float GenerateRayDifferential(const CameraSample &sample,
+                                    //RayDifferential *ray) const;
     private:
       std::string distortion_model;
       coeffVec coeffs;
+      Transform RasterToNDC, NDCToRaster;
 
   };
   // for now the distortionCamera factory creates a perspective camera 
