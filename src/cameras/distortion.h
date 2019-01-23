@@ -15,11 +15,11 @@
 #include "film.h"
 #include <vector>
 
-
 namespace pbrt {
 
   class DistortionCamera : public ProjectiveCamera {
     
+    //TODO: static variable with the suported models
     public:
       typedef std::vector<Float> coeffVec;
       DistortionCamera(const AnimatedTransform &CameraToWorld,
@@ -28,9 +28,9 @@ namespace pbrt {
                        Float fov, Film *film, const Medium *medium,
                        std::string distortion_model, coeffVec coeffs);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
-      //Float GenerateRayDifferential(const CameraSample &sample,
-                                    //RayDifferential *ray) const;
     private:
+      Point3f ApplyDistortionModel(const Float pFilmX, const Float pFilmY) const;
+      Point3f ModelPoly3LensFun(const Point3f pFilm, const Float k) const;
       std::string distortion_model;
       coeffVec coeffs;
       Transform RasterToNDC, NDCToRaster;

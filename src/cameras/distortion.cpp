@@ -8,6 +8,7 @@
 #include <cmath>
 #include "sampling.h"
 
+#define NO_MODEL "MODEL_NOT_FOUND"
 
 namespace pbrt {
 
@@ -21,7 +22,7 @@ namespace pbrt {
                        focalDistance, film, medium),
       distortion_model(distortion_model),
       coeffs(coeffs) {
-        //TODO: this normalisation makes no sense
+        //TODO: this normalisation makes no sense?
         Float xRes = film->fullResolution.x;
         Float yRes = film->fullResolution.y;
         //if (xRes >= yRes)
@@ -30,30 +31,38 @@ namespace pbrt {
           //RasterToNDC = Scale(1. / yRes, 1. / yRes, 1.);
         RasterToNDC = Scale(1. / xRes, 1. / yRes, 1.);
         NDCToRaster = Inverse(RasterToNDC);
+
+        // check for coefficients and model correctly given TODO
+        if (distortion_model == NO_MODEL)
+          Error("No Model given.");
     }
+
+  Point3f DistortionCamera::ApplyDistortionModel(const Float pFilmX,
+                                                 const Float pFilmY) const {
+    if (distortion_model == "poly3lensfun") {
+        Point3f pFilm = Point3f(pFilmX, pFilmY, 0);
+        auto k = coeffs[0];
+        return ModelPoly3LensFun(pFilm, k);
+    }
+    else
+        Error("Model %s is unknown - this should have been caught in constructor", distortion_model);
+  }
+
+  // Compute the distorted position of a Point on the film in raster coordinates
+  Point3f DistortionCamera::ModelPoly3LensFun(const Point3f pFilm, const Float k) const {
+    Point3f pNDC = RasterToNDC(pFilm);
+    Float xCenter = .5, yCenter = .5;
+    Float radius = sqrt(pow(pNDC.x - xCenter, 2) + pow(pNDC.y - yCenter, 2));
+    Float K = 1 - k + k * pow(radius, 2);
+    return NDCToRaster(Point3f(xCenter * (1 - K) + pNDC.x * K,
+                               yCenter * (1 - K) + pNDC.y * K, 
+                               0));
+  }
 
   Float DistortionCamera::GenerateRay(const CameraSample &sample, Ray *ray) const {
     // TODO: this is for now taken directly from PerspectiveCamera
     ProfilePhase prof(Prof::GenerateCameraRay);
-    // Compute raster and camera sample positions
-    Point3f pFilm = Point3f(sample.pFilm.x, sample.pFilm.y, 0);
-    //Warning("Sample pfilm %f, %f", sample.pFilm.x, sample.pFilm.y);
-    //Point3f pCamera = RasterToCamera(pFilm);
-    //*ray = Ray(Point3f(0, 0, 0), Normalize(Vector3f(pCamera)));
-
-    Point3f screenCenter = Point3f(0.5, 0.5, 0);
-    Float xCenter = .5, yCenter = .5;
-    Point3f pNDC = RasterToNDC(pFilm);
-    Float k = 0.0;
-    Float radius = sqrt(pow(pNDC.x - xCenter, 2) + pow(pNDC.y - yCenter, 2));
-    Float K = 1 - k + k * pow(radius, 2);
-    Float newX = xCenter * (1 - K) + pNDC.x * K;
-    Float newY = yCenter * (1 - K) + pNDC.y * K;
-    Point3f newPoint = NDCToRaster(Point3f(newX, newY, 0));
-
-    Point3f pCamera = RasterToCamera(newPoint);
-    //std::cout << "pCamera: " << pCamera << std::endl;
-    //Warning("Weird Ray incoming");
+    Point3f pCamera = RasterToCamera(ApplyDistortionModel(sample.pFilm.x, sample.pFilm.y));
     *ray = Ray(Point3f(0,0,0), Normalize(Vector3f(pCamera)));
 
     // Modify ray for depth of field
@@ -75,71 +84,13 @@ namespace pbrt {
     return 1;
   }
 
-  //Float DistortionCamera::GenerateRayDifferential(const CameraSample &sample,
-                                                  //RayDifferential *ray) const{
-    ////TODO: for now also directly taken from PerspectiveCamera
-    //ProfilePhase prof(Prof::GenerateCameraRay);
-    //// Compute raster and camera sample positions
-    //Point3f pFilm = Point3f(sample.pFilm.x, sample.pFilm.y, 0);
-    //Point3f pCamera = RasterToCamera(pFilm);
-    //Vector3f dir = Normalize(Vector3f(pCamera.x, pCamera.y, pCamera.z));
-    //*ray = RayDifferential(Point3f(0, 0, 0), dir);
-    //// Modify ray for depth of field
-    //if (lensRadius > 0) {
-        //// Sample point on lens
-        //Point2f pLens = lensRadius * ConcentricSampleDisk(sample.pLens);
-
-        //// Compute point on plane of focus
-        //Float ft = focalDistance / ray->d.z;
-        //Point3f pFocus = (*ray)(ft);
-
-        //// Update ray for effect of lens
-        //ray->o = Point3f(pLens.x, pLens.y, 0);
-        //ray->d = Normalize(pFocus - ray->o);
-    //}
-
-    //// in perspective Camera this happened once in the constructor
-    //Vector3f dxCamera =
-        //(RasterToCamera(Point3f(1, 0, 0)) - RasterToCamera(Point3f(0, 0, 0)));
-    //Vector3f dyCamera =
-        //(RasterToCamera(Point3f(0, 1, 0)) - RasterToCamera(Point3f(0, 0, 0)));
-
-    //// Compute offset rays for _PerspectiveCamera_ ray differentials
-    //if (lensRadius > 0) {
-        //// Compute _PerspectiveCamera_ ray differentials accounting for lens
-
-        //// Sample point on lens
-        //Point2f pLens = lensRadius * ConcentricSampleDisk(sample.pLens);
-        //Vector3f dx = Normalize(Vector3f(pCamera + dxCamera));
-        //Float ft = focalDistance / dx.z;
-        //Point3f pFocus = Point3f(0, 0, 0) + (ft * dx);
-        //ray->rxOrigin = Point3f(pLens.x, pLens.y, 0);
-        //ray->rxDirection = Normalize(pFocus - ray->rxOrigin);
-
-        //Vector3f dy = Normalize(Vector3f(pCamera + dyCamera));
-        //ft = focalDistance / dy.z;
-        //pFocus = Point3f(0, 0, 0) + (ft * dy);
-        //ray->ryOrigin = Point3f(pLens.x, pLens.y, 0);
-        //ray->ryDirection = Normalize(pFocus - ray->ryOrigin);
-    //} else {
-        //ray->rxOrigin = ray->ryOrigin = ray->o;
-        //ray->rxDirection = Normalize(Vector3f(pCamera) + dxCamera);
-        //ray->ryDirection = Normalize(Vector3f(pCamera) + dyCamera);
-    //}
-    //ray->time = Lerp(sample.time, shutterOpen, shutterClose);
-    //ray->medium = medium;
-    //*ray = CameraToWorld(*ray);
-    //ray->hasDifferentials = true;
-    //return 1;
-  //}
-
   DistortionCamera *CreateDistortionCamera(const ParamSet &params,
                                             const AnimatedTransform &cam2world,
                                             Film *film, const Medium *medium) {
     // for now extract the parameters for the distortion camera from the 
     // paramset, verify that they are there and go on to create the usual
     // perspective camera
-    std::string model = params.FindOneString("model", "model_not_found");
+    std::string model = params.FindOneString("model", NO_MODEL);
     int n;
     const Float *coeffPtr =  params.FindFloat("coefficients", &n);
     DistortionCamera::coeffVec coeffs;
