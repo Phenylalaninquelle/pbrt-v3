@@ -14,12 +14,17 @@
 #include "perspective.h"
 #include "film.h"
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace pbrt {
 
   class DistortionCamera : public ProjectiveCamera {
     
     //TODO: static variable with the suported models
+    static std::unordered_set<std::string> supported_models;
+    static std::unordered_map<std::string, int> num_coeffs_for_model;
+    //std::unordered_map<std::string, void>function_for_model;
     public:
       typedef std::vector<Float> coeffVec;
       DistortionCamera(const AnimatedTransform &CameraToWorld,
@@ -29,7 +34,7 @@ namespace pbrt {
                        std::string distortion_model, coeffVec coeffs);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
-      Point3f ApplyDistortionModel(const Float pFilmX, const Float pFilmY) const;
+      Point3f ApplyDistortionModel(const CameraSample &sample) const;
       Point3f ModelPoly3LensFun(const Point3f pFilm, const Float k) const;
       std::string distortion_model;
       coeffVec coeffs;

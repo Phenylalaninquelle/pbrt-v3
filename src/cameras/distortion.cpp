@@ -12,6 +12,12 @@
 
 namespace pbrt {
 
+  std::unordered_map<std::string, int> DistortionCamera::num_coeffs_for_model = 
+    { {"poly3lensfun", 1}, };
+
+  std::unordered_set<std::string> DistortionCamera::supported_models = 
+    {"poly3lensfun",};
+
   DistortionCamera::DistortionCamera(const AnimatedTransform &CameraToWorld,
                                      const Bounds2f &screenWindow, Float shutterOpen,
                                      Float shutterClose, Float lensRadius, Float focalDistance,
@@ -22,6 +28,8 @@ namespace pbrt {
                        focalDistance, film, medium),
       distortion_model(distortion_model),
       coeffs(coeffs) {
+
+        /* -------- Define transformations for ray generation --------*/
         //TODO: this normalisation makes no sense?
         Float xRes = film->fullResolution.x;
         Float yRes = film->fullResolution.y;
@@ -31,21 +39,35 @@ namespace pbrt {
           //RasterToNDC = Scale(1. / yRes, 1. / yRes, 1.);
         RasterToNDC = Scale(1. / xRes, 1. / yRes, 1.);
         NDCToRaster = Inverse(RasterToNDC);
+        /* -----------------------------------------------------------*/
 
-        // check for coefficients and model correctly given TODO
+        /* ------------ Validate given model ---------------------------*/
+        // if no model is given either stop or do something smart
         if (distortion_model == NO_MODEL)
-          Error("No Model given.");
+          Error("No Model given."); // defaut? maybe apply no distorton with a fake model
+        else {
+          // check if given model is supported
+          if (supported_models.find(distortion_model) == supported_models.end()) {
+            Error("Model %s is unsupported. Abort.", distortion_model.c_str());
+            // TODO: how do you stop this thing?
+          }
+        }
+        /* -----------------------------------------------------------*/
     }
 
-  Point3f DistortionCamera::ApplyDistortionModel(const Float pFilmX,
-                                                 const Float pFilmY) const {
+  // This function serves as a wraper around the functions that implement the 
+  // actual distortion functions and checks which one to apply and presents 
+  // each one with the correct arguments
+  Point3f DistortionCamera::ApplyDistortionModel(const CameraSample &sample) const {
     if (distortion_model == "poly3lensfun") {
-        Point3f pFilm = Point3f(pFilmX, pFilmY, 0);
-        auto k = coeffs[0];
-        return ModelPoly3LensFun(pFilm, k);
+        // check for exactly one coefficient given
+        if (coeffs.size() != 1)
+          Error("Model %s requires exactly one coefficient, but %d given", distortion_model.c_str(), coeffs.size());
+        Point3f pFilm = Point3f(sample.pFilm.x, sample.pFilm.y, 0);
+        return ModelPoly3LensFun(pFilm, coeffs[0]);
     }
     else
-        Error("Model %s is unknown - this should have been caught in constructor", distortion_model);
+        Error("Model %s is unknown - this should have been caught in constructor", distortion_model.c_str());
   }
 
   // Compute the distorted position of a Point on the film in raster coordinates
@@ -60,9 +82,8 @@ namespace pbrt {
   }
 
   Float DistortionCamera::GenerateRay(const CameraSample &sample, Ray *ray) const {
-    // TODO: this is for now taken directly from PerspectiveCamera
     ProfilePhase prof(Prof::GenerateCameraRay);
-    Point3f pCamera = RasterToCamera(ApplyDistortionModel(sample.pFilm.x, sample.pFilm.y));
+    Point3f pCamera = RasterToCamera(ApplyDistortionModel(sample));
     *ray = Ray(Point3f(0,0,0), Normalize(Vector3f(pCamera)));
 
     // Modify ray for depth of field
@@ -91,6 +112,7 @@ namespace pbrt {
     // paramset, verify that they are there and go on to create the usual
     // perspective camera
     std::string model = params.FindOneString("model", NO_MODEL);
+    std::cout << "Model in Create: " << model << std::endl;
     int n;
     const Float *coeffPtr =  params.FindFloat("coefficients", &n);
     DistortionCamera::coeffVec coeffs;
