@@ -6,17 +6,15 @@
 #include <iostream> // TODO:remove
 #include <vector>
 #include <cmath>
+#include <unordered_map>
 #include "sampling.h"
 
 #define NO_MODEL "MODEL_NOT_FOUND"
+#define POLY_DEGREE 5
 
 namespace pbrt {
 
-  std::unordered_map<std::string, int> DistortionCamera::num_coeffs_for_model = 
-    { {"poly3lensfun", 1}, };
-
-  std::unordered_set<std::string> DistortionCamera::supported_models = 
-    {"poly3lensfun",};
+  std::unordered_map<std::string, int> DistortionCamera::num_coeffs_for_model = { {"poly3lensfun", 1} };
 
   DistortionCamera::DistortionCamera(const AnimatedTransform &CameraToWorld,
                                      const Bounds2f &screenWindow, Float shutterOpen,
@@ -43,21 +41,27 @@ namespace pbrt {
         /* -----------------------------------------------------------*/
 
         /* ------------ Validate given model ---------------------------*/
-        // if no model is given either stop or do something smart
         if (distortion_model == NO_MODEL) {
-          Error("No Model given.");
+          Error("No model for lense distortion given. Rendering will be done without distortion, equivalently to PerspectiveCamera.");
+          fitted_coeffs = coeffVec({0, 1});
         }
         else {
-          // check if given model is supported
-          if (supported_models.find(distortion_model) == supported_models.end()) {
+          if (num_coeffs_for_model.find(distortion_model) == num_coeffs_for_model.end()) {
             Error("Model %s is unsupported. Abort.", distortion_model.c_str());
             // TODO: how do you stop this thing?
           }
+          else {
+            int required_num = num_coeffs_for_model[distortion_model];
+            int given_num = coeffs.size();
+            if (given_num != required_num) {
+              Error("Model %s requires %d coefficients, but only %d provided. Abort", distortion_model,
+                                                                                      required_num,
+                                                                                      given_num);
+              // TODO: how do you stop this thing?
+            }
+            fitted_coeffs = InvertDistortion(distortion_model, coeffs, POLY_DEGREE);
+          }
         }
-        /* -----------------------------------------------------------*/
-        // TODO: remove hardcoded polnomial degree
-        fitted_coeffs = InvertDistortion(distortion_model, coeffs, 5);
-        //fitted_coeffs = coeffVec({0, 1});
     }
 
   DistortionCamera::coeffVec DistortionCamera::InvertDistortion(std::string distortion_model,

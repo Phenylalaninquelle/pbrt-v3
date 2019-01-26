@@ -14,7 +14,6 @@
 #include "film.h"
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <cassert>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/lu.hpp>
@@ -24,12 +23,9 @@ namespace pbrt {
 
   class DistortionCamera : public ProjectiveCamera {
 
-    enum class SUPPORTED_MODELS {POLY3LENSFUN};
-    
-    //TODO: static variable with the suported models
-    static std::unordered_set<std::string> supported_models;
+    // NOTE: when adding a new distortion model, add it and the number of 
+    // its coefficients here
     static std::unordered_map<std::string, int> num_coeffs_for_model;
-    //std::unordered_map<std::string, void>function_for_model;
     public:
       typedef std::vector<Float> coeffVec;
       DistortionCamera(const AnimatedTransform &CameraToWorld,
