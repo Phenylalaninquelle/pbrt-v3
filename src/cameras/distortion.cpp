@@ -69,7 +69,7 @@ namespace pbrt {
                                                                 int poly_degree) {
     // create x vector for sampling distortion values
     // and y vector with sampled values
-    int sample_size = 100;
+    int sample_size = 1000;
     
     std::vector<Float> x(sample_size);
     std::vector<Float> y(sample_size);
@@ -99,25 +99,13 @@ namespace pbrt {
                                pNDC.y * r_ratio + yCenter * (1 - r_ratio), 0));
   }
 
-  Float DistortionCamera::ModelPoly3LensFun(const Float radius, const Float k) const {
+  inline Float DistortionCamera::ModelPoly3LensFun(const Float radius, const Float k) const {
     return radius * (1 - k + k * pow(radius, 2));
   }
-
-  // Compute the distorted position of a Point on the film in raster coordinates
-  //Point3f DistortionCamera::ModelPoly3LensFun(const Point3f pFilm, const Float k) const {
-    //Point3f pNDC = RasterToNDC(pFilm);
-    //Float xCenter = .5, yCenter = .5;
-    //Float radius = sqrt(pow(pNDC.x - xCenter, 2) + pow(pNDC.y - yCenter, 2));
-    //Float K = 1 - k + k * pow(radius, 2);
-    //return NDCToRaster(Point3f(xCenter * (1 - K) + pNDC.x * K,
-                               //yCenter * (1 - K) + pNDC.y * K,
-                               //0));
-  //}
 
   Float DistortionCamera::GenerateRay(const CameraSample &sample, Ray *ray) const {
     ProfilePhase prof(Prof::GenerateCameraRay);
     Point3f pCamera = RasterToCamera(CalculateRayStartpoint(sample));
-    //Point3f pCamera = Point3f(1,1,0);
     *ray = Ray(Point3f(0,0,0), Normalize(Vector3f(pCamera)));
 
     // Modify ray for depth of field
@@ -199,7 +187,6 @@ namespace pbrt {
         // hack for structure synth, which exports half of the full fov
         fov = 2.f * halffov;
     // ------------- equivalent things from PerspectiveCamera end -------------
-
 
     return new DistortionCamera(cam2world, screen, shutteropen, shutterclose,
                                 lensradius, focaldistance, fov, film, medium,
