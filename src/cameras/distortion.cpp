@@ -27,7 +27,8 @@ namespace pbrt {
                        screenWindow, shutterOpen, shutterClose, lensRadius,
                        focalDistance, film, medium),
       distortion_model(distortion_model),
-      coeffs(coeffs) {
+      coeffs(coeffs),
+      fitted_coeffs(){
 
         /* -------- Define transformations for ray generation --------*/
         //TODO: this normalisation makes no sense?
@@ -43,8 +44,9 @@ namespace pbrt {
 
         /* ------------ Validate given model ---------------------------*/
         // if no model is given either stop or do something smart
-        if (distortion_model == NO_MODEL)
-          Error("No Model given."); // defaut? maybe apply no distorton with a fake model
+        if (distortion_model == NO_MODEL) {
+          Error("No Model given.");
+        }
         else {
           // check if given model is supported
           if (supported_models.find(distortion_model) == supported_models.end()) {
@@ -53,37 +55,65 @@ namespace pbrt {
           }
         }
         /* -----------------------------------------------------------*/
+        // TODO: remove hardcoded polnomial degree
+        fitted_coeffs = InvertDistortion(distortion_model, coeffs, 5);
+        //fitted_coeffs = coeffVec({0, 1});
     }
 
-  // This function serves as a wraper around the functions that implement the 
-  // actual distortion functions and checks which one to apply and presents 
-  // each one with the correct arguments
-  Point3f DistortionCamera::ApplyDistortionModel(const CameraSample &sample) const {
+  DistortionCamera::coeffVec DistortionCamera::InvertDistortion(std::string distortion_model,
+                                                                DistortionCamera::coeffVec coeffs,
+                                                                int poly_degree) {
+    // create x vector for sampling distortion values
+    // and y vector with sampled values
+    int sample_size = 100;
+    
+    std::vector<Float> x(sample_size);
+    std::vector<Float> y(sample_size);
+    // fill sample vectors according to the model used
     if (distortion_model == "poly3lensfun") {
-        // check for exactly one coefficient given
-        if (coeffs.size() != 1)
-          Error("Model %s requires exactly one coefficient, but %d given", distortion_model.c_str(), coeffs.size());
-        Point3f pFilm = Point3f(sample.pFilm.x, sample.pFilm.y, 0);
-        return ModelPoly3LensFun(pFilm, coeffs[0]);
+      Float k = coeffs[0];
+      Float scale(sample_size);
+      for (int i = 0; i < sample_size; i++) {
+        x[i] = i / scale;
+        y[i] = ModelPoly3LensFun(x[i], k);
+      }
     }
-    else
-        Error("Model %s is unknown - this should have been caught in constructor", distortion_model.c_str());
+
+    coeffVec poly_coeffs = fit_poly_coeffs(y, x, poly_degree);
+    return poly_coeffs;
   }
 
-  // Compute the distorted position of a Point on the film in raster coordinates
-  Point3f DistortionCamera::ModelPoly3LensFun(const Point3f pFilm, const Float k) const {
+  // the fitted radial model is applied here
+  Point3f DistortionCamera::CalculateRayStartpoint(const CameraSample &sample) const {
+    Point3f pFilm = Point3f(sample.pFilm.x, sample.pFilm.y, 0);
     Point3f pNDC = RasterToNDC(pFilm);
     Float xCenter = .5, yCenter = .5;
     Float radius = sqrt(pow(pNDC.x - xCenter, 2) + pow(pNDC.y - yCenter, 2));
-    Float K = 1 - k + k * pow(radius, 2);
-    return NDCToRaster(Point3f(xCenter * (1 - K) + pNDC.x * K,
-                               yCenter * (1 - K) + pNDC.y * K, 
-                               0));
+    Float r_new = eval_polynomial(fitted_coeffs, std::vector<Float>({radius}))[0];
+    Float r_ratio = r_new / radius;
+    return NDCToRaster(Point3f(pNDC.x * r_ratio + xCenter * (1 - r_ratio),
+                               pNDC.y * r_ratio + yCenter * (1 - r_ratio), 0));
   }
+
+  Float DistortionCamera::ModelPoly3LensFun(const Float radius, const Float k) const {
+    return radius * (1 - k + k * pow(radius, 2));
+  }
+
+  // Compute the distorted position of a Point on the film in raster coordinates
+  //Point3f DistortionCamera::ModelPoly3LensFun(const Point3f pFilm, const Float k) const {
+    //Point3f pNDC = RasterToNDC(pFilm);
+    //Float xCenter = .5, yCenter = .5;
+    //Float radius = sqrt(pow(pNDC.x - xCenter, 2) + pow(pNDC.y - yCenter, 2));
+    //Float K = 1 - k + k * pow(radius, 2);
+    //return NDCToRaster(Point3f(xCenter * (1 - K) + pNDC.x * K,
+                               //yCenter * (1 - K) + pNDC.y * K,
+                               //0));
+  //}
 
   Float DistortionCamera::GenerateRay(const CameraSample &sample, Ray *ray) const {
     ProfilePhase prof(Prof::GenerateCameraRay);
-    Point3f pCamera = RasterToCamera(ApplyDistortionModel(sample));
+    Point3f pCamera = RasterToCamera(CalculateRayStartpoint(sample));
+    //Point3f pCamera = Point3f(1,1,0);
     *ray = Ray(Point3f(0,0,0), Normalize(Vector3f(pCamera)));
 
     // Modify ray for depth of field
