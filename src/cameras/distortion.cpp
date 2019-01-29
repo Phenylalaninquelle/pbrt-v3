@@ -57,18 +57,17 @@ namespace pbrt {
             int required_num = model_iter->second;
             int given_num = coeffs.size();
             if (given_num != required_num) {
-              Error("Model %s requires %d coefficients, but only %d provided. Abort", distortion_model,
+              Error("Model %s requires %d coefficients, but only %d provided. Abort", distortion_model.c_str(),
                                                                                       required_num,
                                                                                       given_num);
               // TODO: how do you stop this thing?
             }
-            fitted_coeffs = InvertDistortion(distortion_model, coeffs, POLY_DEGREE);
+            fitted_coeffs = InvertDistortion(coeffs, POLY_DEGREE);
           }
         }
     }
 
-  DistortionCamera::coeffVec DistortionCamera::InvertDistortion(std::string distortion_model,
-                                                                DistortionCamera::coeffVec coeffs,
+  DistortionCamera::coeffVec DistortionCamera::InvertDistortion(DistortionCamera::coeffVec coeffs,
                                                                 int poly_degree) {
     // create x vector for sampling distortion values
     // and y vector with sampled values
@@ -76,33 +75,22 @@ namespace pbrt {
     Float scale(sample_size);
     std::vector<Float> x(sample_size);
     std::vector<Float> y(sample_size);
+
+    // get pointer to model function
+    Float (*model_func)(const Float, const coeffVec);
+    if (distortion_model == "poly3lensfun")
+      model_func = ModelPoly3LensFun;
+    else if (distortion_model == "poly5lensfun")
+      model_func = ModelPoly5LensFun;
+    else if (distortion_model == "ptlens")
+      model_func = ModelPTLens;
+    else
+      Error("Model %s not supported. this should have been caught in the constructor!", distortion_model.c_str());
+
     // fill sample vectors according to the model used
-    if (distortion_model == "poly3lensfun") {
-      Float k = coeffs[0];
-      for (int i = 0; i < sample_size; i++) {
-        x[i] = i / scale;
-        y[i] = ModelPoly3LensFun(x[i], k);
-      }
-    }
-    else if (distortion_model == "poly5lensfun") {
-      Float k1 = coeffs[0];
-      Float k2 = coeffs[1];
-      for (int i = 0; i < sample_size; i++) {
-        x[i] = i / scale;
-        y[i] = ModelPoly5LensFun(x[i], k1, k2);
-      }
-    }
-    else if (distortion_model == "ptlens") {
-      Float a = coeffs[0];
-      Float b = coeffs[1];
-      Float c = coeffs[2];
-      for (int i = 0; i < sample_size; i++) {
-        x[i] = i / scale;
-        y[i] = ModelPTLens(x[i], a, b, c);
-      }
-    }
-    else {
-      Error("Model %s not supported. this should have been caught in the constructor!", distortion_model);
+    for (int i = 0; i < sample_size; i++) {
+      x[i] = i / scale;
+      y[i] = (*model_func)(x[i], coeffs);
     }
 
     coeffVec poly_coeffs = fit_poly_coeffs(y, x, poly_degree);
@@ -121,17 +109,6 @@ namespace pbrt {
                                pNDC.y * r_ratio + yCenter * (1 - r_ratio), 0));
   }
 
-  inline Float DistortionCamera::ModelPoly3LensFun(const Float radius, const Float k) const {
-    return radius * (1 - k + k * pow(radius, 2));
-  }
-
-  inline Float DistortionCamera::ModelPoly5LensFun(const Float radius, const Float k1, const Float k2) const {
-    return radius * (1 + k1 * pow(radius, 2) + k2 * pow(radius, 4));
-  }
-
-  inline Float DistortionCamera::ModelPTLens(const Float radius, const Float a, const Float b, const Float c) const {
-    return radius * (a * pow(radius, 3) + b * pow(radius, 2), + c * radius + 1 - a - b - c);
-  }
 
   Float DistortionCamera::GenerateRay(const CameraSample &sample, Ray *ray) const {
     ProfilePhase prof(Prof::GenerateCameraRay);

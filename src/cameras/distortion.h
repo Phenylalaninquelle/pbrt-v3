@@ -35,11 +35,7 @@ namespace pbrt {
                        std::string distortion_model, coeffVec coeffs);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
-      Point3f ApplyDistortionModel(const CameraSample &sample) const;
-      Float ModelPoly3LensFun(const Float radius, const Float k) const;
-      Float ModelPoly5LensFun(const Float radius, const Float k1, const Float k2) const;
-      Float ModelPTLens(const Float radius, const Float a, const Float b, const Float c) const;
-      coeffVec InvertDistortion(std::string distortion_model, coeffVec coeffs, int poly_degree);
+      coeffVec InvertDistortion(coeffVec coeffs, int poly_degree);
       Point3f CalculateRayStartpoint(const CameraSample& sample) const;
       std::string distortion_model;
       coeffVec coeffs;
@@ -101,6 +97,21 @@ namespace pbrt {
       result[i] = y_tmp;
     }
     return result;
+  }
+
+  inline Float ModelPoly3LensFun(const Float radius, const DistortionCamera::coeffVec coeffs) {
+    Warning("Poly3");
+    return radius * (1 - coeffs[0] + coeffs[0] * pow(radius, 2));
+  }
+
+  inline Float ModelPoly5LensFun(const Float radius, const DistortionCamera::coeffVec coeffs) {
+    Warning("Poly5");
+    return radius * (1 + coeffs[0] * pow(radius, 2) + coeffs[1] * pow(radius, 4));
+  }
+
+  inline Float ModelPTLens(const Float radius, const DistortionCamera::coeffVec coeffs) {
+    Warning("Ptlens");
+    return radius * (coeffs[0] * pow(radius, 3) + coeffs[1] * pow(radius, 2), + coeffs[2] * radius + 1 - coeffs[0] - coeffs[1] - coeffs[2]);
   }
 }
 
