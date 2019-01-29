@@ -14,7 +14,9 @@
 
 namespace pbrt {
 
-  std::unordered_map<std::string, int> DistortionCamera::num_coeffs_for_model = { {"poly3lensfun", 1} };
+  std::unordered_map<std::string, int> DistortionCamera::num_coeffs_for_model = { {"poly3lensfun", 1},
+                                                                                  {"poly5lensfun", 2},
+                                                                                  {"ptlens", 3} };
 
   DistortionCamera::DistortionCamera(const AnimatedTransform &CameraToWorld,
                                      const Bounds2f &screenWindow, Float shutterOpen,
@@ -46,12 +48,13 @@ namespace pbrt {
           fitted_coeffs = coeffVec({0, 1});
         }
         else {
-          if (num_coeffs_for_model.find(distortion_model) == num_coeffs_for_model.end()) {
+          auto model_iter = num_coeffs_for_model.find(distortion_model);
+          if (model_iter == num_coeffs_for_model.end()) {
             Error("Model %s is unsupported. Abort.", distortion_model.c_str());
             // TODO: how do you stop this thing?
           }
           else {
-            int required_num = num_coeffs_for_model[distortion_model];
+            int required_num = model_iter->second;
             int given_num = coeffs.size();
             if (given_num != required_num) {
               Error("Model %s requires %d coefficients, but only %d provided. Abort", distortion_model,
@@ -70,17 +73,36 @@ namespace pbrt {
     // create x vector for sampling distortion values
     // and y vector with sampled values
     int sample_size = 1000;     // what is a reasonable value here?
-    
+    Float scale(sample_size);
     std::vector<Float> x(sample_size);
     std::vector<Float> y(sample_size);
     // fill sample vectors according to the model used
     if (distortion_model == "poly3lensfun") {
       Float k = coeffs[0];
-      Float scale(sample_size);
       for (int i = 0; i < sample_size; i++) {
         x[i] = i / scale;
         y[i] = ModelPoly3LensFun(x[i], k);
       }
+    }
+    else if (distortion_model == "poly5lensfun") {
+      Float k1 = coeffs[0];
+      Float k2 = coeffs[1];
+      for (int i = 0; i < sample_size; i++) {
+        x[i] = i / scale;
+        y[i] = ModelPoly5LensFun(x[i], k1, k2);
+      }
+    }
+    else if (distortion_model == "ptlens") {
+      Float a = coeffs[0];
+      Float b = coeffs[1];
+      Float c = coeffs[2];
+      for (int i = 0; i < sample_size; i++) {
+        x[i] = i / scale;
+        y[i] = ModelPTLens(x[i], a, b, c);
+      }
+    }
+    else {
+      Error("Model %s not supported. this should have been caught in the constructor!", distortion_model);
     }
 
     coeffVec poly_coeffs = fit_poly_coeffs(y, x, poly_degree);
