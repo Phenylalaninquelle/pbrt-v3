@@ -36,10 +36,11 @@ namespace pbrt {
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
       Point3f ApplyDistortionModel(const CameraSample &sample) const;
-      //Point3f ModelPoly3LensFun(const Point3f pFilm, const Float k) const;
       Float ModelPoly3LensFun(const Float radius, const Float k) const;
+      Float ModelPoly5LensFun(const Float radius, const Float k1, const Float k2) const;
+      Float ModelPTLens(const Float radius, const Float a, const Float b, const Float c) const;
       coeffVec InvertDistortion(std::string distortion_model, coeffVec coeffs, int poly_degree);
-      Point3f CalculateRayStartpoint(const CameraSample&) const;
+      Point3f CalculateRayStartpoint(const CameraSample& sample) const;
       std::string distortion_model;
       coeffVec coeffs;
       Transform RasterToNDC, NDCToRaster;

@@ -32,11 +32,11 @@ namespace pbrt {
         //TODO: this normalisation makes no sense?
         Float xRes = film->fullResolution.x;
         Float yRes = film->fullResolution.y;
-        //if (xRes >= yRes)
-          //RasterToNDC = Scale(1. / xRes, 1. / xRes, 1.);
-        //else
-          //RasterToNDC = Scale(1. / yRes, 1. / yRes, 1.);
-        RasterToNDC = Scale(1. / xRes, 1. / yRes, 1.);
+        if (xRes >= yRes)
+          RasterToNDC = Scale(1. / xRes, 1. / xRes, 1.);
+        else
+          RasterToNDC = Scale(1. / yRes, 1. / yRes, 1.);
+        //RasterToNDC = Scale(1. / xRes, 1. / yRes, 1.);
         NDCToRaster = Inverse(RasterToNDC);
         /* -----------------------------------------------------------*/
 
@@ -69,7 +69,7 @@ namespace pbrt {
                                                                 int poly_degree) {
     // create x vector for sampling distortion values
     // and y vector with sampled values
-    int sample_size = 1000;
+    int sample_size = 1000;     // what is a reasonable value here?
     
     std::vector<Float> x(sample_size);
     std::vector<Float> y(sample_size);
@@ -101,6 +101,14 @@ namespace pbrt {
 
   inline Float DistortionCamera::ModelPoly3LensFun(const Float radius, const Float k) const {
     return radius * (1 - k + k * pow(radius, 2));
+  }
+
+  inline Float DistortionCamera::ModelPoly5LensFun(const Float radius, const Float k1, const Float k2) const {
+    return radius * (1 + k1 * pow(radius, 2) + k2 * pow(radius, 4));
+  }
+
+  inline Float DistortionCamera::ModelPTLens(const Float radius, const Float a, const Float b, const Float c) const {
+    return radius * (a * pow(radius, 3) + b * pow(radius, 2), + c * radius + 1 - a - b - c);
   }
 
   Float DistortionCamera::GenerateRay(const CameraSample &sample, Ray *ray) const {
