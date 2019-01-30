@@ -23,24 +23,12 @@ namespace pbrt {
                                      Float shutterClose, Float lensRadius, Float focalDistance,
                                      Float fov, Film *film, const Medium *medium,
                                      std::string distortion_model, DistortionCamera::coeffVec coeffs,
-                                     int centerX, int centerY)
+                                     int centerOffsetX, int centerOffsetY)
     : ProjectiveCamera(CameraToWorld, Perspective(fov, 1e-2f, 1000.f),
                        screenWindow, shutterOpen, shutterClose, lensRadius,
                        focalDistance, film, medium),
       distortion_model(distortion_model), coeffs(coeffs),
-      centerX(.5 + centerX), centerY(.5 + centerY), fitted_coeffs(){
-
-        /* -------- Define transformations for ray generation --------*/
-        //TODO: this normalisation makes no sense?
-        Float xRes = film->fullResolution.x;
-        Float yRes = film->fullResolution.y;
-        if (xRes >= yRes)
-          RasterToNDC = Scale(1. / xRes, 1. / xRes, 1.);
-        else
-          RasterToNDC = Scale(1. / yRes, 1. / yRes, 1.);
-        //RasterToNDC = Scale(1. / xRes, 1. / yRes, 1.);
-        NDCToRaster = Inverse(RasterToNDC);
-        /* -----------------------------------------------------------*/
+      centerOffsetX(centerOffsetX), centerOffsetY(centerOffsetY), fitted_coeffs(){
 
         /* ------------ Validate given model ---------------------------*/
         if (distortion_model == NO_MODEL) {
@@ -65,46 +53,61 @@ namespace pbrt {
             fitted_coeffs = InvertDistortion(coeffs, POLY_DEGREE);
           }
         }
+
+        /* -------- Define transformations for ray generation --------*/
+        Float xRes = film->fullResolution.x;
+        Float yRes = film->fullResolution.y;
+        Float cornerRadius = sqrt(pow(xRes, 2) + pow(yRes, 2)) / 2.;
+        Float scaleFactor = (xRes >= yRes) ? xRes : yRes;
+        NormalizeToCornerRadius = Scale(1. / scaleFactor, 1. / scaleFactor, 1.);
+        Denormalize = Inverse(NormalizeToCornerRadius);
+
+        /* ---- transform image center ----*/
+        imageCenterNormalized = NormalizeToCornerRadius(Point3f(xRes / 2., yRes / 2., 0));
+        imageCenterNormalized = imageCenterNormalized + Vector3f(centerOffsetX, centerOffsetY, 0);
+
     }
 
   DistortionCamera::coeffVec DistortionCamera::InvertDistortion(DistortionCamera::coeffVec coeffs,
-                                                                int poly_degree) {
+                                                                int polyDegree) {
     // create x vector for sampling distortion values
     // and y vector with sampled values
-    int sample_size = 1000;     // what is a reasonable value here?
-    Float scale(sample_size);
-    std::vector<Float> x(sample_size);
-    std::vector<Float> y(sample_size);
+    int sampleSize = 1000;     // what is a reasonable value here?
+    Float scale(sampleSize);
+    std::vector<Float> x(sampleSize);
+    std::vector<Float> y(sampleSize);
 
     // get pointer to model function
-    Float (*model_func)(const Float, const coeffVec);
+    Float (*modelFunc)(const Float, const coeffVec);
     if (distortion_model == "poly3lensfun")
-      model_func = ModelPoly3LensFun;
+      modelFunc = ModelPoly3LensFun;
     else if (distortion_model == "poly5lensfun")
-      model_func = ModelPoly5LensFun;
+      modelFunc = ModelPoly5LensFun;
     else if (distortion_model == "ptlens")
-      model_func = ModelPTLens;
+      modelFunc = ModelPTLens;
     else
       Error("Model %s not supported. this should have been caught in the constructor!", distortion_model.c_str());
 
     // fill sample vectors according to the model used
-    for (int i = 0; i < sample_size; i++) {
+    for (int i = 0; i < sampleSize; i++) {
       x[i] = i / scale;
-      y[i] = (*model_func)(x[i], coeffs);
+      y[i] = (*modelFunc)(x[i], coeffs);
     }
 
-    coeffVec poly_coeffs = fit_poly_coeffs(y, x, poly_degree);
-    return poly_coeffs;
+    coeffVec polyCoeffs = fit_poly_coeffs(y, x, polyDegree);
+    return polyCoeffs;
   }
 
   // the fitted radial model is applied here
   Point3f DistortionCamera::CalculateRayStartpoint(const CameraSample &sample) const {
-    Point3f pNDC = RasterToNDC(Point3f(sample.pFilm.x, sample.pFilm.y, 0));
-    Float radius = sqrt(pow(pNDC.x - centerX, 2) + pow(pNDC.y - centerY, 2));
-    Float r_new = eval_polynomial(fitted_coeffs, std::vector<Float>({radius}))[0];
-    Float r_ratio = r_new / radius;
-    return NDCToRaster(Point3f(pNDC.x * r_ratio + centerX * (1 - r_ratio),
-                               pNDC.y * r_ratio + centerY * (1 - r_ratio), 0));
+    Float centerX = imageCenterNormalized.x;
+    Float centerY = imageCenterNormalized.y;
+    Point3f pNormalized = NormalizeToCornerRadius(Point3f(sample.pFilm.x, sample.pFilm.y, 0));
+    Float radius = sqrt(pow(pNormalized.x - centerX, 2) + pow(pNormalized.y - centerY, 2));
+    Float rNew = eval_polynomial(fitted_coeffs, std::vector<Float>({radius}))[0];
+    Float rRatio = rNew / radius;
+    return Denormalize(Point3f(pNormalized.x * rRatio + centerX * (1 - rRatio),
+                               pNormalized.y * rRatio + centerY * (1 - rRatio), 0));
   }
 
 
@@ -138,8 +141,8 @@ namespace pbrt {
     // for now extract the parameters for the distortion camera from the 
     // paramset, verify that they are there and go on to create the usual
     // perspective camera
-    Float centerX = params.FindOneFloat("centerx", 0.0);
-    Float centerY = params.FindOneFloat("centery", 0.0);
+    Float centerOffsetX = params.FindOneFloat("centerx", 0.0);
+    Float centerOffsetY = params.FindOneFloat("centery", 0.0);
     std::string model = params.FindOneString("model", NO_MODEL);
     std::cout << "Model in Create: " << model << std::endl;
     int n;
@@ -197,7 +200,7 @@ namespace pbrt {
 
     return new DistortionCamera(cam2world, screen, shutteropen, shutterclose,
                                 lensradius, focaldistance, fov, film, medium,
-                                model, coeffs, centerX, centerY);
+                                model, coeffs, centerOffsetX, centerOffsetY);
   }
 
 }
