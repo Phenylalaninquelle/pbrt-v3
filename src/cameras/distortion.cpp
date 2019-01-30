@@ -22,13 +22,13 @@ namespace pbrt {
                                      const Bounds2f &screenWindow, Float shutterOpen,
                                      Float shutterClose, Float lensRadius, Float focalDistance,
                                      Float fov, Film *film, const Medium *medium,
-                                     std::string distortion_model, DistortionCamera::coeffVec coeffs)
+                                     std::string distortion_model, DistortionCamera::coeffVec coeffs,
+                                     int centerX, int centerY)
     : ProjectiveCamera(CameraToWorld, Perspective(fov, 1e-2f, 1000.f),
                        screenWindow, shutterOpen, shutterClose, lensRadius,
                        focalDistance, film, medium),
-      distortion_model(distortion_model),
-      coeffs(coeffs),
-      fitted_coeffs(){
+      distortion_model(distortion_model), coeffs(coeffs),
+      centerX(.5 + centerX), centerY(.5 + centerY), fitted_coeffs(){
 
         /* -------- Define transformations for ray generation --------*/
         //TODO: this normalisation makes no sense?
@@ -99,14 +99,12 @@ namespace pbrt {
 
   // the fitted radial model is applied here
   Point3f DistortionCamera::CalculateRayStartpoint(const CameraSample &sample) const {
-    Point3f pFilm = Point3f(sample.pFilm.x, sample.pFilm.y, 0);
-    Point3f pNDC = RasterToNDC(pFilm);
-    Float xCenter = .5, yCenter = .5;
-    Float radius = sqrt(pow(pNDC.x - xCenter, 2) + pow(pNDC.y - yCenter, 2));
+    Point3f pNDC = RasterToNDC(Point3f(sample.pFilm.x, sample.pFilm.y, 0));
+    Float radius = sqrt(pow(pNDC.x - centerX, 2) + pow(pNDC.y - centerY, 2));
     Float r_new = eval_polynomial(fitted_coeffs, std::vector<Float>({radius}))[0];
     Float r_ratio = r_new / radius;
-    return NDCToRaster(Point3f(pNDC.x * r_ratio + xCenter * (1 - r_ratio),
-                               pNDC.y * r_ratio + yCenter * (1 - r_ratio), 0));
+    return NDCToRaster(Point3f(pNDC.x * r_ratio + centerX * (1 - r_ratio),
+                               pNDC.y * r_ratio + centerY * (1 - r_ratio), 0));
   }
 
 
@@ -140,6 +138,8 @@ namespace pbrt {
     // for now extract the parameters for the distortion camera from the 
     // paramset, verify that they are there and go on to create the usual
     // perspective camera
+    Float centerX = params.FindOneFloat("centerx", 0.0);
+    Float centerY = params.FindOneFloat("centery", 0.0);
     std::string model = params.FindOneString("model", NO_MODEL);
     std::cout << "Model in Create: " << model << std::endl;
     int n;
@@ -197,7 +197,7 @@ namespace pbrt {
 
     return new DistortionCamera(cam2world, screen, shutteropen, shutterclose,
                                 lensradius, focaldistance, fov, film, medium,
-                                model, coeffs);
+                                model, coeffs, centerX, centerY);
   }
 
 }

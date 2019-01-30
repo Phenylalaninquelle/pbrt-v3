@@ -32,7 +32,8 @@ namespace pbrt {
                        const Bounds2f &screenWindow, Float shutterOpen,
                        Float shutterClose, Float lensRadius, Float focalDistance,
                        Float fov, Film *film, const Medium *medium,
-                       std::string distortion_model, coeffVec coeffs);
+                       std::string distortion_model, coeffVec coeffs,
+                       int centerX, int centerY);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
       coeffVec InvertDistortion(coeffVec coeffs, int poly_degree);
@@ -41,6 +42,7 @@ namespace pbrt {
       coeffVec coeffs;
       Transform RasterToNDC, NDCToRaster;
       coeffVec fitted_coeffs;
+      int centerX, centerY;
   };
 
   DistortionCamera *CreateDistortionCamera(const ParamSet &params,
