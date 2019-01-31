@@ -25,24 +25,24 @@ namespace pbrt {
 
     // NOTE: when adding a new distortion model, add it and the number of 
     // its coefficients here
-    static std::unordered_map<std::string, int> num_coeffs_for_model;
+    static std::unordered_map<std::string, int> numCoeffsForModel;
     public:
       typedef std::vector<Float> coeffVec;
       DistortionCamera(const AnimatedTransform &CameraToWorld,
                        const Bounds2f &screenWindow, Float shutterOpen,
                        Float shutterClose, Float lensRadius, Float focalDistance,
                        Float fov, Film *film, const Medium *medium,
-                       std::string distortion_model, coeffVec coeffs,
+                       std::string distortionModel, coeffVec coeffs,
                        int centerOffsetX, int centerOffsetY);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
       coeffVec InvertDistortion(coeffVec coeffs, int poly_degree);
       Point3f CalculateRayStartpoint(const CameraSample& sample) const;
-      std::string distortion_model;
+      std::string distortionModel;
       coeffVec coeffs;
       Transform NormalizeToCornerRadius, Denormalize;
       Point3f imageCenterNormalized;
-      coeffVec fitted_coeffs;
+      coeffVec fittedCoeffs;
       int centerOffsetX, centerOffsetY;
   };
 
@@ -50,7 +50,7 @@ namespace pbrt {
                                             const AnimatedTransform &cam2world,
                                             Film *film, const Medium *medium);
 
-  template<typename T> std::vector<T> fit_poly_coeffs(const std::vector<T>& x,
+  template<typename T> std::vector<T> fitPolyCoeffs(const std::vector<T>& x,
                                                       const std::vector<T>& y,
                                                       int degree) {
     using namespace boost::numeric::ublas;
@@ -61,7 +61,7 @@ namespace pbrt {
 
     // construct system of equations
     int n = x.size();
-    matrix<T> vandermonde_matrix(n, degree);
+    matrix<T> vandMatrix(n, degree);
     matrix<T> Y(n, 1);
 
     for (int i = 0; i < n; i++)
@@ -69,35 +69,35 @@ namespace pbrt {
     for (int row = 0; row < n; row++) {
       T val = 1.0f;
       for (int col = 0; col < degree; col++) {
-        vandermonde_matrix(row, col) = val;
+        vandMatrix(row, col) = val;
         val *= x[row];
       }
     }
 
-    matrix<T> vandermonde_transposed(trans(vandermonde_matrix));
-    matrix<T> vandermonde_product(prec_prod(vandermonde_transposed, vandermonde_matrix));
-    matrix<T> solved_coeffs(prec_prod(vandermonde_transposed, Y));
+    matrix<T> vandTransposed(trans(vandMatrix));
+    matrix<T> vandProd(prec_prod(vandTransposed, vandMatrix));
+    matrix<T> solvedCoeffs(prec_prod(vandTransposed, Y));
 
     // solve equations
-    permutation_matrix<int> perm(vandermonde_product.size1());
-    const int singular = lu_factorize(vandermonde_product, perm);
+    permutation_matrix<int> perm(vandProd.size1());
+    const int singular = lu_factorize(vandProd, perm);
     assert(singular == 0);
-    lu_substitute(vandermonde_product, perm, solved_coeffs);
+    lu_substitute(vandProd, perm, solvedCoeffs);
 
-    return std::vector<T>(solved_coeffs.data().begin(), solved_coeffs.data().end());
+    return std::vector<T>(solvedCoeffs.data().begin(), solvedCoeffs.data().end());
   }
 
-  template<typename T> std::vector<T> eval_polynomial(const std::vector<T>& coeffs,
+  template<typename T> std::vector<T> evalPolynomial(const std::vector<T>& coeffs,
                                                       const std::vector<T>& x) {
     std::vector<T> result(x.size());
     for (unsigned int i = 0; i < x.size(); i++) {
-      T x_tmp = 1;
-      T y_tmp = 0;
+      T xTmp = 1;
+      T yTmp = 0;
       for (unsigned int j = 0; j < coeffs.size(); j++) {
-        y_tmp += coeffs[j] * x_tmp;
-        x_tmp *= x[i];
+        yTmp += coeffs[j] * xTmp;
+        xTmp *= x[i];
       }
-      result[i] = y_tmp;
+      result[i] = yTmp;
     }
     return result;
   }

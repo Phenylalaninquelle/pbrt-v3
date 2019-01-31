@@ -14,7 +14,7 @@
 
 namespace pbrt {
 
-  std::unordered_map<std::string, int> DistortionCamera::num_coeffs_for_model = { {"poly3lensfun", 1},
+  std::unordered_map<std::string, int> DistortionCamera::numCoeffsForModel = { {"poly3lensfun", 1},
                                                                                   {"poly5lensfun", 2},
                                                                                   {"ptlens", 3} };
 
@@ -22,35 +22,35 @@ namespace pbrt {
                                      const Bounds2f &screenWindow, Float shutterOpen,
                                      Float shutterClose, Float lensRadius, Float focalDistance,
                                      Float fov, Film *film, const Medium *medium,
-                                     std::string distortion_model, DistortionCamera::coeffVec coeffs,
+                                     std::string distortionModel, DistortionCamera::coeffVec coeffs,
                                      int centerOffsetX, int centerOffsetY)
     : ProjectiveCamera(CameraToWorld, Perspective(fov, 1e-2f, 1000.f),
                        screenWindow, shutterOpen, shutterClose, lensRadius,
                        focalDistance, film, medium),
-      distortion_model(distortion_model), coeffs(coeffs),
-      centerOffsetX(centerOffsetX), centerOffsetY(centerOffsetY), fitted_coeffs(){
+      distortionModel(distortionModel), coeffs(coeffs),
+      centerOffsetX(centerOffsetX), centerOffsetY(centerOffsetY), fittedCoeffs(){
 
         /* ------------ Validate given model ---------------------------*/
-        if (distortion_model == NO_MODEL) {
+        if (distortionModel == NO_MODEL) {
           Error("No model for lense distortion given. Rendering will be done without distortion, equivalently to PerspectiveCamera.");
-          fitted_coeffs = coeffVec({0, 1});
+          fittedCoeffs = coeffVec({0, 1});
         }
         else {
-          auto model_iter = num_coeffs_for_model.find(distortion_model);
-          if (model_iter == num_coeffs_for_model.end()) {
-            Error("Model %s is unsupported. Abort.", distortion_model.c_str());
+          auto modelIter = numCoeffsForModel.find(distortionModel);
+          if (modelIter == numCoeffsForModel.end()) {
+            Error("Model %s is unsupported. Abort.", distortionModel.c_str());
             // TODO: how do you stop this thing?
           }
           else {
-            int required_num = model_iter->second;
-            int given_num = coeffs.size();
-            if (given_num != required_num) {
-              Error("Model %s requires %d coefficients, but only %d provided. Abort", distortion_model.c_str(),
-                                                                                      required_num,
-                                                                                      given_num);
+            int requiredNum = modelIter->second;
+            int givenNum = coeffs.size();
+            if (givenNum != requiredNum) {
+              Error("Model %s requires %d coefficients, but only %d provided. Abort", distortionModel.c_str(),
+                                                                                      requiredNum,
+                                                                                      givenNum);
               // TODO: how do you stop this thing?
             }
-            fitted_coeffs = InvertDistortion(coeffs, POLY_DEGREE);
+            fittedCoeffs = InvertDistortion(coeffs, POLY_DEGREE);
           }
         }
 
@@ -79,14 +79,14 @@ namespace pbrt {
 
     // get pointer to model function
     Float (*modelFunc)(const Float, const coeffVec);
-    if (distortion_model == "poly3lensfun")
+    if (distortionModel == "poly3lensfun")
       modelFunc = ModelPoly3LensFun;
-    else if (distortion_model == "poly5lensfun")
+    else if (distortionModel == "poly5lensfun")
       modelFunc = ModelPoly5LensFun;
-    else if (distortion_model == "ptlens")
+    else if (distortionModel == "ptlens")
       modelFunc = ModelPTLens;
     else
-      Error("Model %s not supported. this should have been caught in the constructor!", distortion_model.c_str());
+      Error("Model %s not supported. this should have been caught in the constructor!", distortionModel.c_str());
 
     // fill sample vectors according to the model used
     for (int i = 0; i < sampleSize; i++) {
@@ -94,7 +94,7 @@ namespace pbrt {
       y[i] = (*modelFunc)(x[i], coeffs);
     }
 
-    coeffVec polyCoeffs = fit_poly_coeffs(y, x, polyDegree);
+    coeffVec polyCoeffs = fitPolyCoeffs(y, x, polyDegree);
     return polyCoeffs;
   }
 
@@ -104,7 +104,7 @@ namespace pbrt {
     Float centerY = imageCenterNormalized.y;
     Point3f pNormalized = NormalizeToCornerRadius(Point3f(sample.pFilm.x, sample.pFilm.y, 0));
     Float radius = sqrt(pow(pNormalized.x - centerX, 2) + pow(pNormalized.y - centerY, 2));
-    Float rNew = eval_polynomial(fitted_coeffs, std::vector<Float>({radius}))[0];
+    Float rNew = evalPolynomial(fittedCoeffs, std::vector<Float>({radius}))[0];
     Float rRatio = rNew / radius;
     return Denormalize(Point3f(pNormalized.x * rRatio + centerX * (1 - rRatio),
                                pNormalized.y * rRatio + centerY * (1 - rRatio), 0));
