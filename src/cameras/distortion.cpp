@@ -57,9 +57,8 @@ namespace pbrt {
         /* -------- Define transformations for ray generation --------*/
         Float xRes = film->fullResolution.x;
         Float yRes = film->fullResolution.y;
-        Float cornerRadius = sqrt(pow(xRes, 2) + pow(yRes, 2)) / 2.;
-        Float scaleFactor = (xRes >= yRes) ? xRes : yRes;
-        NormalizeToCornerRadius = Scale(1. / scaleFactor, 1. / scaleFactor, 1.);
+        Float cornerRadius = sqrt(pow(xRes / 2, 2) + pow(yRes / 2, 2)) / 2.;
+        NormalizeToCornerRadius = Scale(1. / cornerRadius, 1. / cornerRadius, 1.);
         Denormalize = Inverse(NormalizeToCornerRadius);
 
         /* ---- transform image center ----*/

@@ -25,8 +25,8 @@ namespace pbrt {
 
     // NOTE: when adding a new distortion model, add it and the number of 
     // its coefficients here
-    static std::unordered_map<std::string, int> numCoeffsForModel;
     public:
+      static std::unordered_map<std::string, int> numCoeffsForModel;
       typedef std::vector<Float> coeffVec;
       DistortionCamera(const AnimatedTransform &CameraToWorld,
                        const Bounds2f &screenWindow, Float shutterOpen,
