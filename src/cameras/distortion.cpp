@@ -8,6 +8,7 @@
 #include <cmath>
 #include <unordered_map>
 #include "sampling.h"
+#include <cassert>
 
 #define NO_MODEL "MODEL_NOT_FOUND"
 #define POLY_DEGREE 5
@@ -15,8 +16,8 @@
 namespace pbrt {
 
   std::unordered_map<std::string, int> DistortionCamera::numCoeffsForModel = { {"poly3lensfun", 1},
-                                                                                  {"poly5lensfun", 2},
-                                                                                  {"ptlens", 3} };
+                                                                               {"poly5lensfun", 2},
+                                                                               {"ptlens", 3} };
 
   DistortionCamera::DistortionCamera(const AnimatedTransform &CameraToWorld,
                                      const Bounds2f &screenWindow, Float shutterOpen,
@@ -32,24 +33,33 @@ namespace pbrt {
 
         /* ------------ Validate given model ---------------------------*/
         if (distortionModel == NO_MODEL) {
-          Error("No model for lense distortion given. Rendering will be done without distortion, equivalently to PerspectiveCamera.");
+          Error("No model for lense distortion given. Rendering will be done without distortion, equivalent to PerspectiveCamera.");
           fittedCoeffs = coeffVec({0, 1});
         }
         else {
           auto modelIter = numCoeffsForModel.find(distortionModel);
           if (modelIter == numCoeffsForModel.end()) {
-            Error("Model %s is unsupported. Abort.", distortionModel.c_str());
-            // TODO: how do you stop this thing?
+            Error("Model %s is unsupported (did you make a typo?). Rendering will be done without distortion, equivalent to PerspectiveCamera.",
+                  distortionModel.c_str());
+            fittedCoeffs = coeffVec({0, 1});
           }
           else {
             int requiredNum = modelIter->second;
             int givenNum = coeffs.size();
-            if (givenNum != requiredNum) {
-              Error("Model %s requires %d coefficients, but only %d provided. Abort", distortionModel.c_str(),
-                                                                                      requiredNum,
-                                                                                      givenNum);
-              // TODO: how do you stop this thing?
+            if (givenNum > requiredNum) {
+              Error("Model %s requires %d coefficients, but %d provided. I will use only the first %d.", 
+                    distortionModel.c_str(), requiredNum, givenNum, requiredNum);
+              auto first = coeffs.begin();
+              auto last = coeffs.begin() + requiredNum;
+              coeffs = coeffVec(first, last);
             }
+            else if (givenNum < requiredNum) {
+              Error("Model %s requires %d coefficients, but only %d provided. I will assume the missing %d to be zero.",
+                    distortionModel.c_str(), requiredNum, givenNum, requiredNum - givenNum);
+              coeffVec zeros = coeffVec(requiredNum - givenNum, .0);
+              coeffs.insert(coeffs.end(), zeros.begin(), zeros.end());
+            }
+            assert(coeffs.size() == requiredNum);
             fittedCoeffs = InvertDistortion(coeffs, POLY_DEGREE);
           }
         }
@@ -57,14 +67,22 @@ namespace pbrt {
         /* -------- Define transformations for ray generation --------*/
         Float xRes = film->fullResolution.x;
         Float yRes = film->fullResolution.y;
-        Float cornerRadius = sqrt(pow(xRes / 2, 2) + pow(yRes / 2, 2)) / 2.;
+        Float cornerRadius = sqrt(pow(xRes, 2) + pow(yRes, 2)) / 2.;
+        std::cout << "Corner radius: " << cornerRadius << std::endl;
         NormalizeToCornerRadius = Scale(1. / cornerRadius, 1. / cornerRadius, 1.);
         Denormalize = Inverse(NormalizeToCornerRadius);
 
+        Point3f p = Point3f(xRes, yRes, 0);
+        std::cout << "Ecke normalisiert" << NormalizeToCornerRadius(p) << std::endl;
+
         /* ---- transform image center ----*/
+        std::cout << "Center offset: " << centerOffsetX << ", " << centerOffsetY << std::endl;
         imageCenterNormalized = NormalizeToCornerRadius(Point3f(xRes / 2., yRes / 2., 0));
         imageCenterNormalized = imageCenterNormalized + Vector3f(centerOffsetX, centerOffsetY, 0);
+        std::cout << "Image Center normalised: " << imageCenterNormalized << std::endl;
 
+        Vector3f rad = Vector3f(imageCenterNormalized) - Vector3f(NormalizeToCornerRadius(p));
+        std::cout << "Normalised distance from image center to Ecke: " << rad.Length() << std::endl;
     }
 
   DistortionCamera::coeffVec DistortionCamera::InvertDistortion(DistortionCamera::coeffVec coeffs,
