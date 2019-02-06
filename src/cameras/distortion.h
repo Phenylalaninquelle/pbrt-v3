@@ -114,7 +114,7 @@ namespace pbrt {
 
   inline Float ModelPTLens(const Float radius, const DistortionCamera::coeffVec coeffs) {
     Warning("Ptlens");
-    return radius * (coeffs[0] * pow(radius, 3) + coeffs[1] * pow(radius, 2), + coeffs[2] * radius + 1 - coeffs[0] - coeffs[1] - coeffs[2]);
+    return radius * (coeffs[0] * pow(radius, 3) + coeffs[1] * pow(radius, 2) + coeffs[2] * radius + 1 - coeffs[0] - coeffs[1] - coeffs[2]);
   }
 }
 
