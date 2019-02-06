@@ -47,9 +47,6 @@
 #include "cameras/orthographic.h"
 #include "cameras/perspective.h"
 #include "cameras/realistic.h"
-
-#include "cameras/distortion.h"
-
 #include "filters/box.h"
 #include "filters/gaussian.h"
 #include "filters/mitchell.h"
@@ -814,9 +811,6 @@ Camera *MakeCamera(const std::string &name, const ParamSet &paramSet,
     else if (name == "environment")
         camera = CreateEnvironmentCamera(paramSet, animatedCam2World, film,
                                          mediumInterface.outside);
-    else if (name == "distortion")
-        camera = CreateDistortionCamera(paramSet, animatedCam2World, film,
-                                        mediumInterface.outside);
     else
         Warning("Camera \"%s\" unknown.", name.c_str());
     paramSet.ReportUnused();
