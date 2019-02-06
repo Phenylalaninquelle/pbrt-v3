@@ -59,6 +59,7 @@ endif()
 
 FIND_PACKAGE ( Sanitizers )
 FIND_PACKAGE ( Threads )
+FIND_PACKAGE ( Boost 1.65 REQUIRED)
 
 IF(CMAKE_BUILD_TYPE MATCHES RELEASE)
   ADD_DEFINITIONS (-DNDEBUG)
@@ -362,6 +363,9 @@ ENDIF ()
 ADD_SUBDIRECTORY(src/ext/ptex)
 SET_PROPERTY(TARGET Ptex_static ptxinfo halftest ftest rtest wtest PROPERTY FOLDER "ext")
 INCLUDE_DIRECTORIES ( src/ext/ptex/src/ptex )
+###########################################################################
+# include boost for boost::numeric
+INCLUDE_DIRECTORIES( ${Boost_INCLUDE_DIR} )
 
 ###########################################################################
 # On to pbrt...
@@ -516,6 +520,7 @@ SET(ALL_PBRT_LIBS
   glog
   Ptex_static
   ${ZLIB_LIBRARY}
+  ${Boost_LIBRARIES}
 )
 
 # Main renderer
