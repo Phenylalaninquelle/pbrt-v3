@@ -33,7 +33,7 @@ namespace pbrt {
                        Float shutterClose, Float lensRadius, Float focalDistance,
                        Float fov, Film *film, const Medium *medium,
                        std::string distortionModel, coeffVec coeffs,
-                       int centerOffsetX, int centerOffsetY);
+                       Float centerOffsetX, Float centerOffsetY);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
       coeffVec InvertDistortion(coeffVec coeffs, int poly_degree);

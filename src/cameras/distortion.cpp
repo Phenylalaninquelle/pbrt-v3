@@ -24,7 +24,7 @@ namespace pbrt {
                                      Float shutterClose, Float lensRadius, Float focalDistance,
                                      Float fov, Film *film, const Medium *medium,
                                      std::string distortionModel, DistortionCamera::coeffVec coeffs,
-                                     int centerOffsetX, int centerOffsetY)
+                                     Float centerOffsetX, Float centerOffsetY)
     : ProjectiveCamera(CameraToWorld, Perspective(fov, 1e-2f, 1000.f),
                        screenWindow, shutterOpen, shutterClose, lensRadius,
                        focalDistance, film, medium),
@@ -64,25 +64,67 @@ namespace pbrt {
           }
         }
 
-        /* -------- Define transformations for ray generation --------*/
+        /* ---- transform image center ----*/
+        /*
+         * Image center in Lensfun database is given as an offset from the ideal
+         * center of the viewframe. The values are normalised  so that the smaller
+         * image dimension has the value 2 (yay, another coordinate system). 
+         * So, to transform from this offset coordinates to Pixelcoordinates, we 
+         * need to scale the offset by yRes/2 (assuming, that yRes < xRes). 
+         */
         Float xRes = film->fullResolution.x;
         Float yRes = film->fullResolution.y;
-        Float cornerRadius = sqrt(pow(xRes, 2) + pow(yRes, 2)) / 2.;
+        Float centerOffsetScaleFactor = (yRes < xRes) ? yRes/2 : xRes/2;
+        Transform OffsetToPixelCoordinates = Scale(centerOffsetScaleFactor, centerOffsetScaleFactor, 1.);
+        std::cout << "Center offset as given: " << centerOffsetX << ", " << centerOffsetY << std::endl;
+        Point3f CenterOffsetPixels = OffsetToPixelCoordinates(Point3f(centerOffsetX, centerOffsetY, 0));
+        std::cout << "Center offset in pixels: " << CenterOffsetPixels.x << ", " << CenterOffsetPixels.y << std::endl;
+
+        /* -------- Define transformations for ray generation --------*/
+        // this is now not really the corner radius but the "biggest corner radius possible"
+        // when taking into account the shifted image center
+        
+        // find biggest center to corner distance based on sign of the offsets:
+        Point3f farthestCorner;
+        if (CenterOffsetPixels.x >= 0) {
+          if (CenterOffsetPixels.y >= 0)
+            farthestCorner = Point3f(0,0,1);
+          else 
+            farthestCorner = Point3f(0, yRes, 1);
+        }
+        else {
+          if (CenterOffsetPixels.y >= 0)
+            farthestCorner = Point3f(xRes, 0, 1);
+          else
+            farthestCorner = Point3f(xRes, yRes, 1);
+        }
+        Point3f shiftedCenter = Point3f(xRes / 2. + CenterOffsetPixels.x,
+                                        yRes / 2. + CenterOffsetPixels.y, 1);
+        Vector3f cornerVec = Vector3f(farthestCorner) - Vector3f(shiftedCenter);
+        Float cornerRadius = cornerVec.Length();
+
+        //Float tmpx = xRes / 2. + abs(CenterOffsetPixels.x);
+        //Float tmpy = yRes / 2. + abs(CenterOffsetPixels.y);
+        //tmpx = CenterOffsetPixels.x;
+        //tmpy = CenterOffsetPixels.y;
+        //std::cout << "Shifted CEnter in Pixels: x=" << tmpx << ", y=" << tmpy << std::endl;
+        //Float cornerRadius = sqrt(pow(xRes / 2. + abs(CenterOffsetPixels.x), 2) +
+                                  //pow(yRes / 2. + abs(CenterOffsetPixels.y), 2));
         std::cout << "Corner radius: " << cornerRadius << std::endl;
         NormalizeToCornerRadius = Scale(1. / cornerRadius, 1. / cornerRadius, 1.);
         Denormalize = Inverse(NormalizeToCornerRadius);
 
         Point3f p = Point3f(xRes, yRes, 0);
         std::cout << "Ecke normalisiert" << NormalizeToCornerRadius(p) << std::endl;
+        Point3f pNeueEcke = Point3f(xRes + abs(CenterOffsetPixels.x),
+                                    yRes + abs(CenterOffsetPixels.y), 0);
+        std::cout << "Neue Ecke normalisiert: " << NormalizeToCornerRadius(pNeueEcke) << std::endl;
 
-        /* ---- transform image center ----*/
-        std::cout << "Center offset: " << centerOffsetX << ", " << centerOffsetY << std::endl;
-        imageCenterNormalized = NormalizeToCornerRadius(Point3f(xRes / 2., yRes / 2., 0));
-        imageCenterNormalized = imageCenterNormalized + Vector3f(centerOffsetX, centerOffsetY, 0);
+        imageCenterNormalized = NormalizeToCornerRadius(shiftedCenter);
         std::cout << "Image Center normalised: " << imageCenterNormalized << std::endl;
-
-        Vector3f rad = Vector3f(imageCenterNormalized) - Vector3f(NormalizeToCornerRadius(p));
-        std::cout << "Normalised distance from image center to Ecke: " << rad.Length() << std::endl;
+        
+        Vector3f normCenterToFarthest = Vector3f(NormalizeToCornerRadius(farthestCorner)) - Vector3f(imageCenterNormalized);
+        std::cout << "Normalised distance from shifted center to farthest corner: " << normCenterToFarthest.Length() << std::endl;
     }
 
   DistortionCamera::coeffVec DistortionCamera::InvertDistortion(DistortionCamera::coeffVec coeffs,
@@ -159,7 +201,9 @@ namespace pbrt {
     // paramset, verify that they are there and go on to create the usual
     // perspective camera
     Float centerOffsetX = params.FindOneFloat("centerx", 0.0);
+    std::cout << "Centerx " << centerOffsetX;
     Float centerOffsetY = params.FindOneFloat("centery", 0.0);
+    std::cout << "Centery " << centerOffsetY;
     std::string model = params.FindOneString("model", NO_MODEL);
     std::cout << "Model in Create: " << model << std::endl;
     int n;
