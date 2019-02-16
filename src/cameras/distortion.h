@@ -38,6 +38,7 @@ namespace pbrt {
     private:
       coeffVec InvertDistortion(coeffVec coeffs, int poly_degree);
       Point3f CalculateRayStartpoint(const CameraSample& sample) const;
+      void SetupImageNormalization(Float xRes, Float yRes, Float centerOffsetX, Float centerOffsetY);
       std::string distortionModel;
       coeffVec coeffs;
       Transform NormalizeToCornerRadius, Denormalize;

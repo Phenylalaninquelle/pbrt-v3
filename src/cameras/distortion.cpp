@@ -1,5 +1,3 @@
-//TODO: license??
-
 #include "cameras/perspective.h"
 #include "cameras/distortion.h"
 #include "paramset.h"
@@ -31,7 +29,10 @@ namespace pbrt {
       distortionModel(distortionModel), coeffs(coeffs),
       centerOffsetX(centerOffsetX), centerOffsetY(centerOffsetY), fittedCoeffs(){
 
-        /* ------------ Validate given model ---------------------------*/
+        /* 
+         * check for valid input of model and params
+         * then set the fitted coefficients accordingly
+         */
         if (distortionModel == NO_MODEL) {
           Error("No model for lense distortion given. Rendering will be done without distortion, equivalent to PerspectiveCamera.");
           fittedCoeffs = coeffVec({0, 1});
@@ -63,8 +64,11 @@ namespace pbrt {
             fittedCoeffs = InvertDistortion(coeffs, POLY_DEGREE);
           }
         }
+        SetupImageNormalization(film->fullResolution.x, film->fullResolution.y, centerOffsetX, centerOffsetY);
+    }
 
-        /* ---- transform image center ----*/
+  void DistortionCamera::SetupImageNormalization(Float xRes, Float yRes, Float centerOffsetX, Float centerOffsetY) {
+        /* ---- transform image center to pixel coordinates ----*/
         /*
          * Image center in Lensfun database is given as an offset from the ideal
          * center of the viewframe. The values are normalised  so that the smaller
@@ -72,18 +76,12 @@ namespace pbrt {
          * So, to transform from this offset coordinates to Pixelcoordinates, we 
          * need to scale the offset by yRes/2 (assuming, that yRes < xRes). 
          */
-        Float xRes = film->fullResolution.x;
-        Float yRes = film->fullResolution.y;
         Float centerOffsetScaleFactor = (yRes < xRes) ? yRes/2 : xRes/2;
         Transform OffsetToPixelCoordinates = Scale(centerOffsetScaleFactor, centerOffsetScaleFactor, 1.);
         std::cout << "Center offset as given: " << centerOffsetX << ", " << centerOffsetY << std::endl;
         Point3f CenterOffsetPixels = OffsetToPixelCoordinates(Point3f(centerOffsetX, centerOffsetY, 0));
         std::cout << "Center offset in pixels: " << CenterOffsetPixels.x << ", " << CenterOffsetPixels.y << std::endl;
 
-        /* -------- Define transformations for ray generation --------*/
-        // this is now not really the corner radius but the "biggest corner radius possible"
-        // when taking into account the shifted image center
-        
         // find biggest center to corner distance based on sign of the offsets:
         Point3f farthestCorner;
         if (CenterOffsetPixels.x >= 0) {
@@ -100,16 +98,8 @@ namespace pbrt {
         }
         Point3f shiftedCenter = Point3f(xRes / 2. + CenterOffsetPixels.x,
                                         yRes / 2. + CenterOffsetPixels.y, 1);
-        Vector3f cornerVec = Vector3f(farthestCorner) - Vector3f(shiftedCenter);
-        Float cornerRadius = cornerVec.Length();
+        Float cornerRadius = (Vector3f(farthestCorner) - Vector3f(shiftedCenter)).Length();
 
-        //Float tmpx = xRes / 2. + abs(CenterOffsetPixels.x);
-        //Float tmpy = yRes / 2. + abs(CenterOffsetPixels.y);
-        //tmpx = CenterOffsetPixels.x;
-        //tmpy = CenterOffsetPixels.y;
-        //std::cout << "Shifted CEnter in Pixels: x=" << tmpx << ", y=" << tmpy << std::endl;
-        //Float cornerRadius = sqrt(pow(xRes / 2. + abs(CenterOffsetPixels.x), 2) +
-                                  //pow(yRes / 2. + abs(CenterOffsetPixels.y), 2));
         std::cout << "Corner radius: " << cornerRadius << std::endl;
         NormalizeToCornerRadius = Scale(1. / cornerRadius, 1. / cornerRadius, 1.);
         Denormalize = Inverse(NormalizeToCornerRadius);
@@ -125,7 +115,7 @@ namespace pbrt {
         
         Vector3f normCenterToFarthest = Vector3f(NormalizeToCornerRadius(farthestCorner)) - Vector3f(imageCenterNormalized);
         std::cout << "Normalised distance from shifted center to farthest corner: " << normCenterToFarthest.Length() << std::endl;
-    }
+  }
 
   DistortionCamera::coeffVec DistortionCamera::InvertDistortion(DistortionCamera::coeffVec coeffs,
                                                                 int polyDegree) {
@@ -207,10 +197,15 @@ namespace pbrt {
     std::string model = params.FindOneString("model", NO_MODEL);
     std::cout << "Model in Create: " << model << std::endl;
     int n;
-    const Float *coeffPtr =  params.FindFloat("coefficients", &n);
     DistortionCamera::coeffVec coeffs;
-    for (int i = 0; i < n; i++)
-      coeffs.push_back(*(coeffPtr + i));
+    const Float *coeffPtr =  params.FindFloat("coefficients", &n);
+    if (coeffPtr) {
+      for (int i = 0; i < n; i++)
+        coeffs.push_back(*(coeffPtr + i));
+    }
+    else {
+      coeffs = DistortionCamera::coeffVec({0, 1});
+    }
     std::cout << "Distortion Camera with " << model << " and " << n << " coeffs : ";
     for (DistortionCamera::coeffVec::iterator it = coeffs.begin(); it != coeffs.end(); it++)
       std::cout << *it << " ";
