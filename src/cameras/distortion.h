@@ -1,5 +1,3 @@
-// TODO: license?
-
 #if defined (_MSC_VER)
 #define NOMINMAX
 #pragma once
@@ -14,17 +12,12 @@
 #include "film.h"
 #include <vector>
 #include <unordered_map>
-#include <cassert>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/lu.hpp>
-
 
 namespace pbrt {
 
   class DistortionCamera : public ProjectiveCamera {
-
-    // NOTE: when adding a new distortion model, add it and the number of 
-    // its coefficients here
     public:
       static std::unordered_map<std::string, int> numCoeffsForModel;
       typedef std::vector<Float> coeffVec;
@@ -36,8 +29,8 @@ namespace pbrt {
                        Float centerOffsetX, Float centerOffsetY);
       Float GenerateRay(const CameraSample &sample, Ray *ray) const;
     private:
-      coeffVec InvertDistortion(coeffVec coeffs, int poly_degree);
-      Point3f CalculateRayStartpoint(const CameraSample& sample) const;
+      coeffVec InvertDistortion(coeffVec coeffs, int poly_degree) const;
+      Point3f CalculateRayStartingpoint(const CameraSample& sample) const;
       void SetupImageNormalization(Float xRes, Float yRes, Float centerOffsetX, Float centerOffsetY);
       std::string distortionModel;
       coeffVec coeffs;
@@ -52,18 +45,19 @@ namespace pbrt {
                                             Film *film, const Medium *medium);
 
   template<typename T> std::vector<T> fitPolyCoeffs(const std::vector<T>& x,
-                                                      const std::vector<T>& y,
-                                                      int degree) {
-    using namespace boost::numeric::ublas;
+                                                    const std::vector<T>& y,
+                                                    int degree) {
+    namespace ublas = boost::numeric::ublas;
 
-    assert(x.size() == y.size());
+    if (x.size() != y.size())
+      throw "x and y of unequal size";
 
     degree++;
 
     // construct system of equations
     int n = x.size();
-    matrix<T> vandMatrix(n, degree);
-    matrix<T> Y(n, 1);
+    ublas::matrix<T> vandMatrix(n, degree);
+    ublas::matrix<T> Y(n, 1);
 
     for (int i = 0; i < n; i++)
       Y(i, 0) = y[i];
@@ -75,21 +69,22 @@ namespace pbrt {
       }
     }
 
-    matrix<T> vandTransposed(trans(vandMatrix));
-    matrix<T> vandProd(prec_prod(vandTransposed, vandMatrix));
-    matrix<T> solvedCoeffs(prec_prod(vandTransposed, Y));
+    ublas::matrix<T> vandTransposed(ublas::trans(vandMatrix));
+    ublas::matrix<T> vandProd(prec_prod(vandTransposed, vandMatrix));
+    ublas::matrix<T> solvedCoeffs(ublas::prec_prod(vandTransposed, Y));
 
     // solve equations
-    permutation_matrix<int> perm(vandProd.size1());
-    const int singular = lu_factorize(vandProd, perm);
-    assert(singular == 0);
-    lu_substitute(vandProd, perm, solvedCoeffs);
+    ublas::permutation_matrix<int> perm(vandProd.size1());
+    const int isSingular = ublas::lu_factorize(vandProd, perm);
+    if (isSingular)
+      throw "System matrix is singular. Did you pass only unique values in x?";
+    ublas::lu_substitute(vandProd, perm, solvedCoeffs);
 
     return std::vector<T>(solvedCoeffs.data().begin(), solvedCoeffs.data().end());
   }
 
   template<typename T> std::vector<T> evalPolynomial(const std::vector<T>& coeffs,
-                                                      const std::vector<T>& x) {
+                                                     const std::vector<T>& x) {
     std::vector<T> result(x.size());
     for (unsigned int i = 0; i < x.size(); i++) {
       T xTmp = 1;
@@ -104,17 +99,14 @@ namespace pbrt {
   }
 
   inline Float ModelPoly3LensFun(const Float radius, const DistortionCamera::coeffVec coeffs) {
-    Warning("Poly3");
     return radius * (1 - coeffs[0] + coeffs[0] * pow(radius, 2));
   }
 
   inline Float ModelPoly5LensFun(const Float radius, const DistortionCamera::coeffVec coeffs) {
-    Warning("Poly5");
     return radius * (1 + coeffs[0] * pow(radius, 2) + coeffs[1] * pow(radius, 4));
   }
 
   inline Float ModelPTLens(const Float radius, const DistortionCamera::coeffVec coeffs) {
-    Warning("Ptlens");
     return radius * (coeffs[0] * pow(radius, 3) + coeffs[1] * pow(radius, 2), + coeffs[2] * radius + 1 - coeffs[0] - coeffs[1] - coeffs[2]);
   }
 }
